@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta nam="viewport" content=""width=device-width, initial-scale="1.0">
+    <title>Wildfire Detection</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+    
+    <style>
+        .container { max-width: 800px; margin-top: 50px; }
+        #map-container { height: 400px; margin-top: 20px; display: none; }
+        #coordinate-form { display: none; margin-top: 20px; }
+        .result { margin-top: 20px; }
+        .location-list { margin-top: 20px; }
+        .location-item {
+            padding: 10px;
+            margin: 5px 0;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="text-center mb-4">Wildfire Detection</h1>
+
+        <div class="card">
+            <div class="card-body">
+                <form id="upload-form">
+                    <div class="mb-3">
+                        <label for="image" class="form-label">Upload Image</label>
+                        <input type ="file" class="form-control" id="image" accept="image/*" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Analyze Image</button>
+                </form>
+            </div>
+        </div>
+
+        <div id ="result" class="result"></div>
+
+        <div id ="locations-container" class="location-list" style ="display: none;">
+            <h4>Detected Wildfire Locations</h4>
+            <div id="locations-list"></div>
+        </div>
+
+        <div id="coordinate-form" class="card">
+            <div class="card-body">
+                <h5>Wildfire Detected! Provide Coordinates:</h5>
+                <form id ="location-form">
+                    <div class ="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="latitude" class="form-label">Latitude</label>
+                                <input type="number" class="form-control" id="latitude" step="any" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="longitude" class="form-label">Longitude</label>
+                                <input type="number" class="form-control" id="longitude" step="any" required>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-danger">Add to Map</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="map-container"></div>
+    </div>
+
+    <script>
+        function updateLocationsList(locations) {
+            const container = document.getElementById('locations-container');
+            const list = document.getElementById('locations-list');
+            
+            if (locations.length > 0) {
+                container.style.display = 'block';
+                list.innerHTML = locations.map((loc, index) => `
+                    <div class="location-item">
+                        <strong>Wildfire #${index + 1}</strong><br>
+                        Latitude: ${loc[0].toFixed(6)}<br>
+                        Longitude: ${loc[1].toFixed(6)}
+                    </div>
+                `).join('');
+            } else {
+                container.style.display = 'none';
+            }
+        }
+
+        // Function to update the map
+        function updateMap() {
+            const mapContainer = document.getElementById('map-container');
+            mapContainer.style.display = 'block';
+            mapContainer.innerHTML = `<iframe src="/get_map" width="100%" height="100%" frameborder="0"></iframe>`;
+        }
+
+        // Function to fetch and update all locations
+        async function fetchAndUpdateLocations() {
+            try {
+                const response = await fetch('/get_locations');
+                const data = await response.json();
+                updateLocationsList(data.locations);
+                if (data.count > 0) {
+                    updateMap();
+                }
+            } catch (error) {
+                console.error('Error fetching locations:', error);
+            }
+        }
+
+        // Initial fetch of locations
+        fetchAndUpdateLocations();
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            const imageFile = document.getElementById('image').files[0];
+            formData.append('file', imageFile);
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                console.log(data)
+
+                if (data.error) {
+                    document.getElementById('result').innerHTML = `
+                        <div class="alert alert-danger">
+                            ${data.error}
+                        </div>
+                    `;
+                    return;
+                }
+
+                let resultHTML = `
+                    <div class="alert ${data.prediction ? 'alert-danger' : 'alert-success'}">
+                        <h4>${data.prediction ? 'Wildfire Detected!' : 'No Wildfire Detected'}</h4>
+                        <p>Confidence: ${(data.confidence * 100 ).toFixed(2)}%</p>
+                    </div>
+                `;
+                document.getElementById('result').innerHTML = resultHTML;
+
+                if (data.prediction) {
+                    document.getElementById('coordinate-form').style.display ='block';
+                } else {
+                    document.getElementById('coordinate-form').style.display = 'none';
+                }
+
+            } catch (error) {
+                console.error('Error', error);
+                document.getElementById('result').innerHTML = `
+                    <div class="alert alert-danger">
+                        Error processing image. Please try again.
+                    </div>
+                    `;
+            }
+        })    
+        document.getElementById('location-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const latitude = document.getElementById('latitude').value;
+            const longitude = document.getElementById('longitude').value;
+
+            try {
+                const response = await fetch('/save_coordinates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ latitude, longitude })
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    // Clear the form
+                    document.getElementById('latitude').value = '';
+                    document.getElementById('longitude').value = '';
+                    
+                    // Update the map and locations list
+                    updateMap();
+                    fetchAndUpdateLocations();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error saving coordinates. Please try again.');
+            }
+        });
+    </script>
+</body>
+
+
+
+
+
+
+
+
+
+
+</html>
