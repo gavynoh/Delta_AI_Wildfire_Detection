@@ -8,10 +8,10 @@ import cv2
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024 #16MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
-#creating uploads folder
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok = True)
+# Create uploads folder if it doesn't exist
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 model = model_file.create_model()
 model.load_weights('wildfire.weights.h5')
@@ -76,20 +76,15 @@ def predict():
             img = cv2.resize(img, (32, 32))
             img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             img = img / 255.0
-            img = img.reshape(1,32,32,3)
-            imgs =[]
-            imgs.append(img)
-            print("img", imgs)
+            img = img.reshape(1, 32, 32, 3)
 
             prediction = model.predict(img)
             result = bool(prediction[0][0] > 0.5)
-            confidence = float(prediction [0][0])
+            confidence = float(prediction[0][0])
             if result == False:
                 confidence = 1 - confidence
 
             os.remove(filepath)
-
-            print(result, confidence)
 
             return jsonify({
                 'prediction': result,
@@ -110,10 +105,7 @@ def save_coordinates():
     longitude = float(data.get('longitude'))
    
     try:
-        # Add new location to in-memory storage
         wildfire_locations.append([latitude, longitude])
-        
-        # Update the map with all locations
         map_path = create_map()
         return jsonify({
             'success': True,
@@ -124,4 +116,5 @@ def save_coordinates():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
