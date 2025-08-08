@@ -5,3 +5,4 @@ opencv-python
 Werkzeug==2.0.1
 folium==0.14.0
 gunicorn==20.1.0 
+gunicorn
